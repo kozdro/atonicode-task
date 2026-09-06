@@ -21,8 +21,12 @@ button {
   color: white;
   font: inherit;
   font-weight: 600;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
 }
-button:disabled { opacity: 0.65; cursor: not-allowed; }
+button.listening { background: #a03e30; }
+button:focus-visible { outline: 3px solid #a03e30; outline-offset: 4px; }
 .recording p { font-size: 13px; color: #626d65; }
 .card {
   margin-top: 14px;

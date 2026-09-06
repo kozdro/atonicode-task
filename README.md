@@ -1,8 +1,8 @@
 # Notes assistant
 
-Small Electron + TypeScript app for macOS. Work in progress: the desktop shell is
-implemented and Codex CLI can create/read notes. Recording, transcription, and
-the connected assistant flow are not implemented.
+Small Electron + TypeScript app for macOS. The window supports hold-to-record and
+Codex CLI can create/read notes independently. Transcription and the connected
+assistant flow are not implemented.
 
 ## Run
 
@@ -13,7 +13,18 @@ npm ci
 npm start
 ```
 
-The hold-to-talk button is deliberately disabled until recording is implemented.
+Hold the button to record; release to finish. Allow Electron's microphone prompt
+on first use, then hold again if the permission dialog interrupted the gesture.
+The status shows `Ready`, `Listening…`, or an error, with brief permission/finishing
+states. Release outside the button, pointer cancellation, capture loss, or window
+focus loss also stop recording and release the microphone. Only one recording
+can be active, including while permission or the audio handoff is pending.
+
+Recording uses `getUserMedia` and `MediaRecorder` in the renderer. The preload
+exposes only `sendRecording(audio: ArrayBuffer, mimeType: string)`. Main validates
+and acknowledges the audio, then discards it. Audio is not saved, uploaded,
+transcribed, or sent to Codex in this step.
+
 The macOS start command clears `ELECTRON_RUN_AS_NODE`, which some coding-agent
 environments set and which otherwise prevents Electron from opening a window.
 
@@ -52,7 +63,9 @@ and the final reply comes from stdout. The function is not connected to the UI y
 ## Scope and tradeoffs
 
 - Plain HTML/CSS and TypeScript; no framework, bundler, or application libraries.
-- The renderer is unprivileged. Add preload and narrow IPC when wiring the flow.
+- The renderer is unprivileged; the preload exposes only the recorded-audio handoff.
+- The renderer compiles as a plain browser script using `moduleDetection: legacy`;
+  main and preload still compile as CommonJS. No bundler is needed.
 - `notes/` is next to the source app, at the repository root. Note contents are
   ignored by Git.
 - Planned transcription uses a hosted API and requires separate credentials.
@@ -63,18 +76,26 @@ and the final reply comes from stdout. The function is not connected to the UI y
 
 ## Next steps
 
-Hold-to-record, transcription, complete flow, and essential error handling, in
-that order. No custom notes sandbox or advanced lifecycle/permission handling in
-this first slice.
+Transcription, complete flow, and essential error handling, in that order. No
+custom notes sandbox or advanced lifecycle/permission handling in this first slice.
 
 ## Validation so far
 
 - Tested on macOS with Node 22.18.0, Electron 44.2.0, TypeScript 7.0.2, and
   Codex CLI 0.153.0 authenticated with ChatGPT.
 - `npm run typecheck` and `npm run build` pass.
-- `npm start` launches. A temporary Electron smoke harness verified page and CSS
-  loading, the disabled voice button, no renderer `require`, and no vertical
-  overflow at the initial window size. Captured and inspected the rendered window.
+- `npm start` launches. Captured and inspected the rendered window, including
+  `Ready` and `Listening…` states. The renderer has no `require` and its bridge
+  exposes only `sendRecording`.
+- Native microphone permission changed from `not-determined` to `granted`; the
+  user confirmed seeing and allowing Electron's macOS permission prompt.
+- A temporary Electron harness drove real microphone recording through press and
+  release (inside/outside), pointer cancellation, capture loss, window blur, and
+  repeated holds. Each recording reached main as WebM/Opus, returned to `Ready`,
+  and stopped all microphone tracks. Captured audio decoded successfully.
+- The same check verified a second press cannot start a concurrent recording.
+  With a deliberately delayed microphone request, release prevented a late start.
+  Simulated permission denial displayed an error; the next real recording worked.
 - `npm run test:codex` passes: file creation on disk and readback of a random
   reference through a separate CLI invocation. Temporary note removed afterward.
 - Encountered and fixed inherited `ELECTRON_RUN_AS_NODE=1` preventing GUI launch.
@@ -84,4 +105,5 @@ this first slice.
 Keep incremental commits, the full unedited screen recording, and the Codex
 session log from `~/.codex/sessions/`. Recording is managed outside this app.
 Time spent: approximately 6 minutes on steps 1–2, including installation and checks;
-earlier architecture planning is excluded. Full-project time remains to be tallied.
+approximately 7 minutes on recording and its checks. Earlier architecture planning
+is excluded. Full-project time remains to be tallied.

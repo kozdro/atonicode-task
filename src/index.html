@@ -6,6 +6,7 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'">
     <title>Notes assistant</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="../dist/renderer.js" defer></script>
   </head>
   <body>
     <main>
@@ -15,8 +16,9 @@
         <p>Speak a thought. Keep it in your notes.</p>
       </header>
       <section class="recording" aria-label="Voice input">
-        <button type="button" disabled aria-describedby="recording-status">Hold to talk</button>
-        <p id="recording-status" role="status">Voice input is coming next.</p>
+        <button id="record-button" type="button" aria-describedby="recording-status">Hold to talk</button>
+        <p id="recording-status" role="status">Ready</p>
+        <p id="recording-result">Hold to record. Release to finish.</p>
       </section>
       <section class="card" aria-labelledby="transcript-heading">
         <h2 id="transcript-heading">You said</h2>

@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "Node16",
+    "moduleDetection": "legacy",
     "rootDir": "src",
     "outDir": "dist",
     "strict": true,
