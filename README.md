@@ -1,42 +1,85 @@
 # Notes assistant
 
-Small Electron + TypeScript app for macOS. Hold-to-record audio is transcribed and
-displayed in the window. Codex CLI can create/read notes independently; transcripts
-are not connected to Codex yet.
+A small Electron + TypeScript desktop assistant for macOS. Requirements 1–4 are
+complete: hold to record speech, see its transcript, send it through `codex exec`,
+let Codex read or update files in `notes/`, and see the reply in the window.
 
-## Run
+## Setup and run
 
-Requires Node.js 22 and npm on macOS. Export `OPENAI_API_KEY` in the terminal that
-launches the app. It needs OpenAI API access for transcription, separately from
-Codex login. The app reads the environment directly; it does not load `.env` files.
+Prerequisites:
+
+- macOS and Node.js >= 22.12.0 with npm.
+- An OpenAI API key with speech-to-text access.
+- An installed and authenticated Codex CLI. The verified version is 0.153.0.
+
+Install and authenticate Codex if needed:
 
 ```sh
+npm install -g @openai/codex@0.153.0
+codex login
+```
+
+`codex` should normally be available on `PATH` after installation. Confirm with:
+
+```sh
+codex --version
+codex login status
+```
+
+Export the transcription credential, install dependencies, and start the app from
+the repository root:
+
+```sh
+export OPENAI_API_KEY="your-api-key"
 npm ci
 npm start
 ```
 
-Hold the button to record; release to finish. Allow Electron's microphone prompt
-on first use, then hold again if the permission dialog interrupted the gesture.
-The status shows `Ready`, `Listening…`, `Transcribing…`, or an error, with brief
-permission/finishing states. Release outside the button, pointer cancellation,
-capture loss, or window focus loss also stop recording and release the microphone.
-Only one recording can be active, including while permission or transcription is
-pending. During transcription the button is disabled; it becomes available again on success or
-failure. The returned transcript appears unchanged in “You said”.
+If the app reports that Codex CLI was not found even though it is installed, set
+`CODEX_BIN` to the executable's absolute path before launch:
 
-Recording uses `getUserMedia` and `MediaRecorder` in the renderer. The preload
-exposes only `sendRecording(audio: ArrayBuffer, mimeType: string): Promise<string>`.
-Main uploads the existing WebM/Opus bytes directly to OpenAI's transcription
-endpoint using `whisper-1` and built-in `fetch`/`FormData`. There are no temporary
-audio files, conversion tools, SDK dependencies, or retries. The API key stays in
-main; only the transcript returns to the renderer. Nothing is sent to Codex.
+```sh
+export CODEX_BIN="/absolute/path/to/codex"
+npm start
+```
 
-Missing credentials, a failed request, or an empty transcript show an error and
-allow another recording. After changing the launch environment, restart the app.
-HTTP failures show the status code without exposing the provider response body.
+On first use, allow Electron's microphone request. Hold **Hold to talk**, speak,
+and release. The app moves through `Listening…`, `Transcribing…`, and `Thinking…`
+before returning to `Ready`.
 
-The macOS start command clears `ELECTRON_RUN_AS_NODE`, which some coding-agent
-environments set and which otherwise prevents Electron from opening a window.
+## What works
+
+- Hold-to-talk starts on pointer down and stops on release, pointer cancellation,
+  capture loss, or window focus loss.
+- Recorded WebM/Opus audio is transcribed and displayed under **You said**.
+- The transcript is passed to Codex CLI, which can read and write Markdown notes
+  in the repository's `notes/` directory.
+- Codex's plain-text reply is displayed under **Assistant**.
+- Only one request runs at a time, and recoverable errors allow another attempt.
+- Note state persists across app restarts because it lives on disk.
+
+The complete flow was manually verified with two separate voice requests:
+
+1. “Add milk to my shopping list.” created or updated `notes/shopping-list.md`.
+2. After fully quitting and relaunching the app, “What's on my shopping list?”
+   read the existing note and replied that the list contains milk.
+
+## Architecture
+
+The sandboxed renderer uses `getUserMedia` and `MediaRecorder`. A context-isolated
+preload exposes two operations: `sendRecording(audio, mimeType)` and
+`askAgent(text)`.
+
+The main process sends recorded audio directly to OpenAI's speech-to-text endpoint
+with built-in `fetch` and `FormData`; it does not create temporary files or convert
+audio. `OPENAI_API_KEY` stays in the main process. The OpenAI API is used only for
+speech-to-text.
+
+After displaying the transcript, the renderer calls `askAgent`. The main process
+runs `codex exec` with `notes/` as its working directory and returns the final CLI
+message to the renderer. Assistant reasoning and all note reads and writes happen
+through Codex CLI rather than a raw language-model API. Each request starts a fresh
+Codex invocation; the files provide persistence.
 
 ## Checks
 
@@ -45,83 +88,45 @@ npm run typecheck
 npm run build
 ```
 
-For a real CLI integration check, install the tested Codex CLI version and log in:
+The Codex persistence smoke check uses the authenticated account and makes two
+real agent requests. It creates a unique temporary note, reads it through a fresh
+Codex invocation, verifies the result, and removes that note:
 
 ```sh
-npm install -g @openai/codex@0.153.0
-codex login
 npm run test:codex
 ```
 
-This uses your Codex account and makes two real agent requests. It creates a
-unique Markdown shopping note in `notes/`, verifies its contents on disk, then
-asks a fresh invocation to read it. The check removes its temporary note afterward.
-No other notes are changed by the test harness.
+## Tradeoffs and known limitations
 
-If `codex` is not on your PATH, set `CODEX_BIN` to its absolute executable path:
+- The app runs from a source checkout. It has no installer, signing, notarization,
+  auto-update, or production release configuration.
+- It has only been tested on macOS. Windows is unsupported and unverified.
+- Speech-to-text is hosted, requires internet access and `OPENAI_API_KEY`, and uses
+  `whisper-1`.
+- Codex CLI requires its own installation and authentication. This is separate
+  from the transcription API key.
+- `notes/` is the source checkout's repository-root directory. Its contents are
+  ignored by Git. The working directory and prompt guide Codex to this folder;
+  there is no hardened filesystem-confinement layer.
+- Provider and Codex failures are recoverable in the UI, but diagnostics are
+  intentionally generic except for missing credentials, missing Codex CLI,
+  microphone denial, empty transcription, and transcription HTTP status.
+- There are no retries, streaming responses, conversation history, or cancellation
+  of an in-flight transcription or Codex request.
 
-```sh
-CODEX_BIN=/absolute/path/to/codex npm run test:codex
-```
-
-The runner uses `codex exec` with `notes/` as its working directory and an explicit
-notes-only prompt. `workspace-write` enables normal CLI file editing; this is not
-a custom security boundary. `--ignore-user-config` keeps personal configuration
-out of the run while reusing saved CLI authentication. Prompts go through stdin,
-and the final reply comes from stdout. The function is not connected to the UI yet.
-
-## Scope and tradeoffs
-
-- Plain HTML/CSS and TypeScript; no framework, bundler, or application libraries.
-- The renderer is unprivileged; the preload exposes only the recorded-audio handoff.
-- The renderer compiles as a plain browser script using `moduleDetection: legacy`;
-  main and preload still compile as CommonJS. No bundler is needed.
-- `notes/` is next to the source app, at the repository root. Note contents are
-  ignored by Git.
-- Transcription uses a hosted API and requires separate credentials and internet.
-  Assistant requests and note operations use Codex CLI.
-- Cut: spoken replies, global hotkeys, wake word, streaming, note editor, database,
-  persistent chat history, multiple providers, Windows, installers, signing,
-  auto-update, and local speech models unless hosted transcription is unavailable.
+Intentional cuts: spoken replies, global hotkeys, wake word, streaming
+transcription, waveform UI, note browser/editor, database, persistent chat history,
+multiple providers, Windows support, installers, signing, auto-update, and local
+speech models.
 
 ## Next steps
 
-Connect the transcript to Codex, then handle essential failures in the full flow. No
-custom notes sandbox or advanced lifecycle/permission handling in this first slice.
+If this moved beyond the task, the next work would be packaging and signing, Windows support, clearer provider/CLI diagnostics,
+request cancellation and timeouts, and an optional local transcription path.
 
-## Validation so far
+## Submission
 
-- Tested on macOS with Node 22.18.0, Electron 44.2.0, TypeScript 7.0.2, and
-  Codex CLI 0.153.0 authenticated with ChatGPT.
-- `npm run typecheck` and `npm run build` pass.
-- `npm start` launches. Captured and inspected the rendered window, including
-  `Ready` and `Listening…` states. The renderer has no `require` and its bridge
-  exposes only `sendRecording`.
-- Native microphone permission changed from `not-determined` to `granted`; the
-  user confirmed seeing and allowing Electron's macOS permission prompt.
-- A temporary Electron harness drove real microphone recording through press and
-  release (inside/outside), pointer cancellation, capture loss, window blur, and
-  repeated holds. Each recording reached main as WebM/Opus, returned to `Ready`,
-  and stopped all microphone tracks. Captured audio decoded successfully.
-- The same check verified a second press cannot start a concurrent recording.
-  With a deliberately delayed microphone request, release prevented a late start.
-  Simulated permission denial displayed an error; the next real recording worked.
-- Transcription checks used real microphone audio with mocked HTTP responses:
-  main received WebM directly, the request used multipart upload, `Transcribing…`
-  disabled recording, and exact response text appeared in the UI. Missing key,
-  HTTP/network failures, and empty text all allowed another recording. No automatic
-  retries occurred. Preload removes Electron's internal IPC prefix from errors.
-- Live OpenAI check: the user launched with `OPENAI_API_KEY` exported and confirmed
-  that speaking “Toast” displayed “Toast” in the UI, with processing states shown.
-  A second recording replaced the transcript and the app returned to `Ready`.
-- `npm run test:codex` passes: file creation on disk and readback of a random
-  reference through a separate CLI invocation. Temporary note removed afterward.
-- Encountered and fixed inherited `ELECTRON_RUN_AS_NODE=1` preventing GUI launch.
+Include the full unedited screen recording and the Codex session log from
+`~/.codex/sessions/` with the repository or zip.
 
-## Submission notes
-
-Keep incremental commits, the full unedited screen recording, and the Codex
-session log from `~/.codex/sessions/`. Recording is managed outside this app.
-Time spent: approximately 6 minutes on steps 1–2, 7 minutes on recording, and
-7 minutes on transcription, including checks and the manual verification wait.
-Earlier architecture planning is excluded. Full-project time remains to be tallied.
+**Time spent:** 1h 28m
