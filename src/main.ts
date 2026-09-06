@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'node:path';
+import { transcribeAudio } from './transcription';
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -26,7 +27,7 @@ void app.whenReady().then(() => {
         typeof mimeType !== 'string' || !mimeType.startsWith('audio/')) {
       throw new Error('Invalid audio recording.');
     }
-    // Acknowledge receipt only. Transcription will be added in the next step.
+    return transcribeAudio(audio, mimeType);
   });
   createWindow();
   app.on('activate', () => {

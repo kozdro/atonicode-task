@@ -1,6 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('notesAssistant', {
-  sendRecording: (audio: ArrayBuffer, mimeType: string): Promise<void> =>
-    ipcRenderer.invoke('recording:submit', audio, mimeType),
+  sendRecording: async (audio: ArrayBuffer, mimeType: string): Promise<string> => {
+    try {
+      return await ipcRenderer.invoke('recording:submit', audio, mimeType);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Transcription failed. Please try again.';
+      throw new Error(message.replace(/^Error invoking remote method 'recording:submit': Error: /, ''));
+    }
+  },
 });

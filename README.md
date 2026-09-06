@@ -1,12 +1,14 @@
 # Notes assistant
 
-Small Electron + TypeScript app for macOS. The window supports hold-to-record and
-Codex CLI can create/read notes independently. Transcription and the connected
-assistant flow are not implemented.
+Small Electron + TypeScript app for macOS. Hold-to-record audio is transcribed and
+displayed in the window. Codex CLI can create/read notes independently; transcripts
+are not connected to Codex yet.
 
 ## Run
 
-Requires Node.js 22 and npm on macOS.
+Requires Node.js 22 and npm on macOS. Export `OPENAI_API_KEY` in the terminal that
+launches the app. It needs OpenAI API access for transcription, separately from
+Codex login. The app reads the environment directly; it does not load `.env` files.
 
 ```sh
 npm ci
@@ -15,15 +17,23 @@ npm start
 
 Hold the button to record; release to finish. Allow Electron's microphone prompt
 on first use, then hold again if the permission dialog interrupted the gesture.
-The status shows `Ready`, `Listening…`, or an error, with brief permission/finishing
-states. Release outside the button, pointer cancellation, capture loss, or window
-focus loss also stop recording and release the microphone. Only one recording
-can be active, including while permission or the audio handoff is pending.
+The status shows `Ready`, `Listening…`, `Transcribing…`, or an error, with brief
+permission/finishing states. Release outside the button, pointer cancellation,
+capture loss, or window focus loss also stop recording and release the microphone.
+Only one recording can be active, including while permission or transcription is
+pending. During transcription the button is disabled; it becomes available again on success or
+failure. The returned transcript appears unchanged in “You said”.
 
 Recording uses `getUserMedia` and `MediaRecorder` in the renderer. The preload
-exposes only `sendRecording(audio: ArrayBuffer, mimeType: string)`. Main validates
-and acknowledges the audio, then discards it. Audio is not saved, uploaded,
-transcribed, or sent to Codex in this step.
+exposes only `sendRecording(audio: ArrayBuffer, mimeType: string): Promise<string>`.
+Main uploads the existing WebM/Opus bytes directly to OpenAI's transcription
+endpoint using `whisper-1` and built-in `fetch`/`FormData`. There are no temporary
+audio files, conversion tools, SDK dependencies, or retries. The API key stays in
+main; only the transcript returns to the renderer. Nothing is sent to Codex.
+
+Missing credentials, a failed request, or an empty transcript show an error and
+allow another recording. After changing the launch environment, restart the app.
+HTTP failures show the status code without exposing the provider response body.
 
 The macOS start command clears `ELECTRON_RUN_AS_NODE`, which some coding-agent
 environments set and which otherwise prevents Electron from opening a window.
@@ -68,7 +78,7 @@ and the final reply comes from stdout. The function is not connected to the UI y
   main and preload still compile as CommonJS. No bundler is needed.
 - `notes/` is next to the source app, at the repository root. Note contents are
   ignored by Git.
-- Planned transcription uses a hosted API and requires separate credentials.
+- Transcription uses a hosted API and requires separate credentials and internet.
   Assistant requests and note operations use Codex CLI.
 - Cut: spoken replies, global hotkeys, wake word, streaming, note editor, database,
   persistent chat history, multiple providers, Windows, installers, signing,
@@ -76,7 +86,7 @@ and the final reply comes from stdout. The function is not connected to the UI y
 
 ## Next steps
 
-Transcription, complete flow, and essential error handling, in that order. No
+Connect the transcript to Codex, then handle essential failures in the full flow. No
 custom notes sandbox or advanced lifecycle/permission handling in this first slice.
 
 ## Validation so far
@@ -96,6 +106,14 @@ custom notes sandbox or advanced lifecycle/permission handling in this first sli
 - The same check verified a second press cannot start a concurrent recording.
   With a deliberately delayed microphone request, release prevented a late start.
   Simulated permission denial displayed an error; the next real recording worked.
+- Transcription checks used real microphone audio with mocked HTTP responses:
+  main received WebM directly, the request used multipart upload, `Transcribing…`
+  disabled recording, and exact response text appeared in the UI. Missing key,
+  HTTP/network failures, and empty text all allowed another recording. No automatic
+  retries occurred. Preload removes Electron's internal IPC prefix from errors.
+- Live OpenAI check: the user launched with `OPENAI_API_KEY` exported and confirmed
+  that speaking “Toast” displayed “Toast” in the UI, with processing states shown.
+  A second recording replaced the transcript and the app returned to `Ready`.
 - `npm run test:codex` passes: file creation on disk and readback of a random
   reference through a separate CLI invocation. Temporary note removed afterward.
 - Encountered and fixed inherited `ELECTRON_RUN_AS_NODE=1` preventing GUI launch.
@@ -104,6 +122,6 @@ custom notes sandbox or advanced lifecycle/permission handling in this first sli
 
 Keep incremental commits, the full unedited screen recording, and the Codex
 session log from `~/.codex/sessions/`. Recording is managed outside this app.
-Time spent: approximately 6 minutes on steps 1–2, including installation and checks;
-approximately 7 minutes on recording and its checks. Earlier architecture planning
-is excluded. Full-project time remains to be tallied.
+Time spent: approximately 6 minutes on steps 1–2, 7 minutes on recording, and
+7 minutes on transcription, including checks and the manual verification wait.
+Earlier architecture planning is excluded. Full-project time remains to be tallied.
