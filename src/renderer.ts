@@ -1,6 +1,7 @@
 interface Window {
   notesAssistant: {
     sendRecording(audio: ArrayBuffer, mimeType: string): Promise<string>;
+    askAgent(text: string): Promise<string>;
   };
 }
 
@@ -8,6 +9,7 @@ const recordButton = document.querySelector<HTMLButtonElement>('#record-button')
 const recordingStatus = document.querySelector<HTMLParagraphElement>('#recording-status')!;
 const recordingResult = document.querySelector<HTMLParagraphElement>('#recording-result')!;
 const transcriptText = document.querySelector<HTMLParagraphElement>('#transcript')!;
+const assistantReply = document.querySelector<HTMLParagraphElement>('#assistant-reply')!;
 
 interface RecordingSession {
   pointerId: number | null;
@@ -80,8 +82,13 @@ recordButton.addEventListener('pointerdown', async (event) => {
         if (audio.size === 0) throw new Error('No audio captured. Hold the button a little longer.');
         showStatus('Transcribing…');
         recordButton.disabled = true;
-        transcriptText.textContent = await window.notesAssistant.sendRecording(await audio.arrayBuffer(), audio.type);
+        const transcript = await window.notesAssistant.sendRecording(await audio.arrayBuffer(), audio.type);
+        transcriptText.textContent = transcript;
         transcriptText.classList.remove('placeholder');
+        showStatus('Thinking…');
+        assistantReply.textContent = '';
+        assistantReply.classList.remove('placeholder');
+        assistantReply.textContent = await window.notesAssistant.askAgent(transcript);
         recordingResult.textContent = 'Hold to record. Release to finish.';
         showStatus('Ready');
       } catch (error) {

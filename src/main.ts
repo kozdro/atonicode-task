@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'node:path';
 import { transcribeAudio } from './transcription';
+import { askCodex } from './codex';
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -28,6 +29,20 @@ void app.whenReady().then(() => {
       throw new Error('Invalid audio recording.');
     }
     return transcribeAudio(audio, mimeType);
+  });
+  ipcMain.handle('agent:ask', async (_event, text: unknown) => {
+    if (typeof text !== 'string' || !text.trim()) throw new Error('A transcript is required.');
+    try {
+      const reply = await askCodex(text);
+      if (!reply) throw new Error('Codex returned an empty reply.');
+      return reply;
+    } catch (error) {
+      console.error('Codex request failed:', error);
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        throw new Error('Codex CLI was not found. Set CODEX_BIN to its executable path and restart the app.');
+      }
+      throw new Error('Codex failed. Check that the CLI is installed and logged in, then try again.');
+    }
   });
   createWindow();
   app.on('activate', () => {
