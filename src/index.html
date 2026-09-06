@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'">
+    <title>Notes assistant</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">YOUR EVERYDAY NOTES</p>
+        <h1>A little help remembering.</h1>
+        <p>Speak a thought. Keep it in your notes.</p>
+      </header>
+      <section class="recording" aria-label="Voice input">
+        <button type="button" disabled aria-describedby="recording-status">Hold to talk</button>
+        <p id="recording-status" role="status">Voice input is coming next.</p>
+      </section>
+      <section class="card" aria-labelledby="transcript-heading">
+        <h2 id="transcript-heading">You said</h2>
+        <p class="placeholder">Your words will appear here.</p>
+      </section>
+      <section class="card" aria-labelledby="reply-heading">
+        <h2 id="reply-heading">Assistant</h2>
+        <p class="placeholder">Your reply will appear here.</p>
+      </section>
+      <footer>Notes assistant · Powered by Codex CLI</footer>
+    </main>
+  </body>
+</html>

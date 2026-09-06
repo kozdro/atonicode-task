@@ -1,0 +1,17 @@
+{
+  "name": "notes-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A small Electron notes assistant powered by Codex CLI",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "npm run build && env -u ELECTRON_RUN_AS_NODE electron ."
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "electron": "44.2.0",
+    "typescript": "7.0.2"
+  }
+}
